@@ -309,7 +309,7 @@ window.addEventListener('resize', drawRadar)
       <dotrino-support
         class="topbar-coin"
         href="https://ko-fi.com/dotrino"
-        repo="dotrino/trueque"
+        repo="imdotrino/dotrino-trueque"
         discord="https://discord.gg/D648uq7cth"></dotrino-support>
     </header>
 
