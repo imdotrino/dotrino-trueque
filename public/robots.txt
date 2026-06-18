@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://trueque.dotrino.com/sitemap.xml

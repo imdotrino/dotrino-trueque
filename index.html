@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <title>Trueque — anuncios cerca de ti, efímeros y privados</title>
+  <meta name="description" content="Publica un anuncio georreferenciado (vendo, regalo o busco) que vive como máximo 24 h, descubre lo que hay cerca de ti por radio y cierra el trato por mensajería. Sin guardar tu ubicación ni tu historial." />
+  <link rel="canonical" href="https://trueque.dotrino.com/" />
+
+  <meta name="theme-color" content="#0a0e14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Trueque" />
+  <link rel="apple-touch-icon" href="./icon-192.png" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="es_ES" />
+  <meta property="og:site_name" content="Dotrino" />
+  <meta property="og:title" content="Trueque — anuncios cerca de ti, efímeros y privados" />
+  <meta property="og:description" content="Vende, regala o busca cerca de ti. Anuncios efímeros (máx 24 h), descubrimiento por radio, trato por mensajería. Sin rastrear tu ubicación." />
+  <meta property="og:url" content="https://trueque.dotrino.com/" />
+  <meta property="og:image" content="https://trueque.dotrino.com/og.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Trueque — anuncios cerca de ti, efímeros y privados" />
+  <meta name="twitter:description" content="Vende, regala o busca cerca de ti. Anuncios efímeros, descubrimiento por radio, trato por mensajería." />
+  <meta name="twitter:image" content="https://trueque.dotrino.com/og.jpg" />
+
+  <!-- JSON-LD WebApplication -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Trueque",
+    "url": "https://trueque.dotrino.com/",
+    "description": "Anuncios georreferenciados efímeros (vendo/regalo/busco) con descubrimiento por radio y contacto por mensajería, sin guardar la ubicación del usuario.",
+    "applicationCategory": "LifestyleApplication",
+    "operatingSystem": "Web",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "publisher": { "@type": "Organization", "name": "Dotrino", "url": "https://dotrino.com/" }
+  }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.js"></script>
+
+  <!-- UI de soporte del ecosistema (Web Component) -->
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@dotrino/support@0.3/src/index.js"></script>
+
+  <!-- Analítica cookieless autohosteada (GoatCounter); no cuenta en localhost/LAN. -->
+  <script>window.goatcounter = { path: function (p) { return location.hostname + p } }</script>
+  <script data-goatcounter="https://goat.dotrino.com/count" async src="https://goat.dotrino.com/count.js"></script>
+
+  <!-- Service worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}))
+    }
+  </script>
+</body>
+</html>
