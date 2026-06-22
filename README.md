@@ -1,5 +1,7 @@
 # Trueque
 
+> **Parte del ecosistema [Dotrino](https://dotrino.com).** Misión: aplicaciones que resuelven problemas comunes, respetando tu privacidad — sin anuncios, sin cookies, sin rastreo de datos, sin vender tu identidad a nadie.
+
 Anuncios **georreferenciados efímeros** cerca tuyo. Publicás *vendo / regalo /
 busco*, descubrís lo que hay alrededor por radio, y cerrás el trato por
 mensajería. El anuncio vive **como máximo 24 h** y **no se guarda tu ubicación
