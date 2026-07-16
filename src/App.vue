@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch, watchEffect, nextTick } from 'vue'
 import { initIdentity, getMyPubkey, getIdentity } from './services/identity'
 import { getGeo } from './services/geo'
 import { contactSeller } from './services/proxy'
@@ -7,6 +7,9 @@ import { getReputation } from './services/reputation'
 import { createVaultProfileProvider } from '@dotrino/profile'
 import '@dotrino/profile'
 import { useBackLayer } from '@dotrino/nav/vue'
+// Barra superior estándar del ecosistema (CONVENCIONES §5): trae marca, volver,
+// perfil (§6.1) y moneda de support en un solo componente. No la re-armamos.
+import '@dotrino/topbar'
 
 const KINDS = [
   { id: 'vendo', label: 'Vendo', color: 'var(--vendo)' },
@@ -76,11 +79,16 @@ let watchId = null
 
 onMounted(async () => {
   try {
-    await initIdentity()
+    identityInst.value = await initIdentity()
     ready.value = true
   } catch (e) {
     idError.value = 'No se pudo abrir el vault de identidad (id.dotrino.com).'
     console.warn(e)
+  }
+  // Reputación para el modal de perfil del topbar (sin ella, el botón solo abre
+  // la ficha sin web-of-trust).
+  if (identityInst.value) {
+    try { reputationInst.value = await getReputation() } catch (_) { /* sin registro */ }
   }
   startLocate()
   poll = setInterval(() => { if (pos.value && ready.value) refresh() }, 15000)
@@ -196,20 +204,6 @@ function bindProfile (el) {
   ensureProfileProvider().then((p) => { if (p) el.provider = p })
 }
 function onProfileRate () { flash('Calificación publicada. Gracias.') }
-// "Mi perfil": botón del header (a la izquierda de la moneda de soporte) que abre
-// el MISMO Web Component compartido en modo self con mi identidad del vault.
-const myProfilePk = ref(null)
-const myProfileName = ref(null)
-async function openMyProfile () {
-  try {
-    const identity = await getIdentity()
-    const pk = identity?.me?.publickey
-    if (!pk) return
-    myProfileName.value = identity?.me?.nickname || null
-    myProfilePk.value = pk
-  } catch (_) { /* sin identidad no abre */ }
-}
-useBackLayer(myProfilePk, { onClose: () => { myProfilePk.value = null } })
 const profileTheme = {
   '--ccp-bg': 'var(--panel)',
   '--ccp-bg-2': 'var(--panel2)',
@@ -227,6 +221,20 @@ const profileTheme = {
   '--ccp-input-bg': 'var(--panel2)',
   '--ccp-radius': '12px',
 }
+
+// "Mi perfil" (§6.1): el topbar es dueño del botón Y del modal <dotrino-profile
+// mode="self">. Solo le pasamos las instancias del vault + el tema; así la app no
+// fija la versión de @dotrino/profile (viaja dentro de @dotrino/topbar).
+const identityInst = ref(null)
+const reputationInst = ref(null)
+const topbarRef = ref(null)
+watchEffect(() => {
+  const tb = topbarRef.value
+  if (!tb) return
+  tb.identity = identityInst.value ?? null
+  tb.reputation = reputationInst.value ?? null
+  tb.profileTheme = profileTheme
+})
 
 async function sendContact () {
   if (!contactTarget.value) return
@@ -292,26 +300,27 @@ window.addEventListener('resize', drawRadar)
 
 <template>
   <div class="app">
-    <header class="topbar">
-      <dotrino-back class="cc-back"></dotrino-back>
-      <div class="brand">
-        <img src="/icon.svg" alt="" width="26" height="26" />
-        <span>Trueque</span>
-      </div>
-      <div class="actions">
-        <dotrino-install class="cc-install" data-testid="install-btn"></dotrino-install>
-      </div>
-      <button class="profile-btn" data-testid="my-profile" @click="openMyProfile" title="Mi perfil" aria-label="Mi perfil">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-6 8-6s8 2 8 6" />
-        </svg>
-      </button>
-      <dotrino-support
-        class="topbar-coin"
-        href="https://ko-fi.com/dotrino"
-        repo="imdotrino/dotrino-trueque"
-        discord="https://discord.gg/D648uq7cth"></dotrino-support>
-    </header>
+    <!-- Barra superior estándar (§5): marca + volver + perfil + moneda de support.
+         `no-lang`: la app es solo en español (falta el i18n es/en, §9).
+         `:lang.attr`: OJO, tiene que ir como ATRIBUTO. El componente define
+         `get lang()` sin setter, así que Vue (que en un custom element prefiere la
+         propiedad cuando `'lang' in el`) no lograría escribirlo: se perdería en
+         silencio y el topbar caería a navigator.language, poniendo <html lang="en">
+         en una app que solo habla español. -->
+    <dotrino-topbar
+      ref="topbarRef"
+      class="topbar"
+      brand="Trueque"
+      icon="/icon.svg"
+      brand-href="./"
+      :lang.attr="'es'"
+      no-lang
+      profile
+      support-href="https://ko-fi.com/dotrino"
+      support-repo="imdotrino/dotrino-trueque"
+      support-discord="https://discord.gg/D648uq7cth">
+      <dotrino-install slot="end" class="cc-install" data-testid="install-btn"></dotrino-install>
+    </dotrino-topbar>
 
     <main class="main">
       <p v-if="idError" class="banner err">{{ idError }}</p>
@@ -449,19 +458,6 @@ window.addEventListener('resize', drawRadar)
       </div>
     </div>
 
-    <!-- Mi perfil (botón del header, a la izquierda de la moneda): mismo Web
-         Component compartido en modo self con mi identidad del vault. -->
-    <dotrino-profile
-      v-if="myProfilePk"
-      :ref="bindProfile"
-      modal
-      mode="self"
-      :pubkey="myProfilePk"
-      :name="myProfileName"
-      :style="profileTheme"
-      @cc-profile-close="myProfilePk = null"
-    ></dotrino-profile>
-
     <div v-if="toast" class="toast">{{ toast }}</div>
   </div>
 </template>
@@ -482,15 +478,20 @@ window.addEventListener('resize', drawRadar)
 .tagSearch { width: 100%; }
 .afinScore { color: var(--accent); }
 
+/* El <dotrino-topbar> trae la barra; acá solo el tema de la app y el sticky
+   (el .bar del componente no lo es). */
 .topbar {
-  display: flex; align-items: center; gap: .5rem;
-  padding: .6rem .8rem; padding-top: calc(.6rem + env(safe-area-inset-top));
-  border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 5;
+  position: sticky; top: 0; z-index: 5;
+  --dotrino-topbar-bg: var(--panel);
+  --dotrino-topbar-border: var(--line);
+  --dotrino-topbar-text: var(--text);
+  --dotrino-topbar-muted: var(--muted);
+  --dotrino-topbar-accent: var(--accent);
+  --dotrino-topbar-accent-text: var(--accent-ink);
 }
-.cc-back { color: var(--text, currentColor); --cc-back-size: 36px; margin-left: -4px; }
-.brand { display: flex; align-items: center; gap: .45rem; font-weight: 800; font-size: 1.1rem; }
-.actions { margin-left: auto; }
-.topbar-coin { margin-left: .25rem; }
+.topbar::part(brand-name) { font-weight: 800; font-size: 1.1rem; }
+/* Botón de perfil: circular ghost, como el resto de controles de la app. */
+.topbar::part(profile) { width: 34px; height: 34px; background: var(--panel2); color: var(--text); }
 /* "Instalar App": Web Component compartido con el look del antiguo botón ghost small. */
 .cc-install {
   flex-shrink: 0;
@@ -508,16 +509,6 @@ window.addEventListener('resize', drawRadar)
   background: transparent;
   font-weight: 600;
 }
-/* "Mi perfil": botón circular ghost a la izquierda de la moneda de soporte. */
-.profile-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 34px; height: 34px; padding: 0; flex-shrink: 0;
-  border: 1px solid var(--line); background: var(--panel2); color: var(--text);
-  border-radius: 50%; cursor: pointer; transition: .15s;
-}
-.profile-btn svg { width: 18px; height: 18px; display: block; }
-.profile-btn:hover { border-color: var(--accent); color: var(--accent); }
-
 .main { flex: 1; width: 100%; max-width: 680px; margin: 0 auto; padding: .8rem; }
 
 .banner { padding: .6rem .8rem; border-radius: .6rem; margin: .4rem 0; display: flex; gap: .6rem; align-items: center; }
