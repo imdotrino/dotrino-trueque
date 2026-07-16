@@ -8,25 +8,40 @@ import { createVaultProfileProvider } from '@dotrino/profile'
 import '@dotrino/profile'
 import { useBackLayer } from '@dotrino/nav/vue'
 // Barra superior estándar del ecosistema (CONVENCIONES §5): trae marca, volver,
-// perfil (§6.1) y moneda de support en un solo componente. No la re-armamos.
+// perfil (§6.1), toggle de idioma (§9) y moneda de support en un solo componente.
 import '@dotrino/topbar'
+import { detectLang, messages } from './i18n'
 
+// Idioma (§9): el dueño es el <dotrino-topbar> — él lo persiste ('dotrino.lang'),
+// pone el <html lang> y nos avisa por 'dotrino-lang'. Aquí solo lo reflejamos.
+const lang = ref(detectLang())
+const t = computed(() => messages[lang.value])
+function onLang (e) { lang.value = e.detail?.lang === 'en' ? 'en' : 'es' }
+
+// Los ids son DATOS (viajan en el pin y en el filtro del índice geo): no se
+// traducen nunca. Lo único bilingüe es la etiqueta que se muestra.
 const KINDS = [
-  { id: 'vendo', label: 'Vendo', color: 'var(--vendo)' },
-  { id: 'regalo', label: 'Regalo', color: 'var(--regalo)' },
-  { id: 'busco', label: 'Busco', color: 'var(--busco)' }
+  { id: 'vendo', color: 'var(--vendo)' },
+  { id: 'regalo', color: 'var(--regalo)' },
+  { id: 'busco', color: 'var(--busco)' }
 ]
 const kindOf = id => KINDS.find(k => k.id === id) || KINDS[0]
+const kindLabel = id => t.value.kinds[kindOf(id).id]
 
 const ready = ref(false)
-const idError = ref('')
+// Los errores se guardan por CLAVE, no como texto ya traducido: así el banner
+// visible cambia de idioma al vuelo si se toca el toggle con el error en pantalla.
+const idErrorKey = ref('')
+const idError = computed(() => idErrorKey.value ? t.value.errors[idErrorKey.value] : '')
 const pos = ref(null)            // { lat, lng }
 const locating = ref(false)
-const geoError = ref('')
+const geoErrorKey = ref('')
+const geoError = computed(() => geoErrorKey.value ? t.value.errors[geoErrorKey.value] : '')
 
 const pins = ref([])
 const loading = ref(false)
-const netError = ref('')
+const netErrorKey = ref('')
+const netError = computed(() => netErrorKey.value ? t.value.errors[netErrorKey.value] : '')
 
 const radiusMeters = ref(2000)
 const filter = ref('todos')      // 'todos' | 'vendo' | 'regalo' | 'busco'
@@ -47,12 +62,14 @@ const sending = ref(false)
 useBackLayer(showPublish)
 useBackLayer(contactTarget, { onClose: () => { contactTarget.value = null } })
 
-const toast = ref('')
+// Igual que los errores: guardamos la clave, el texto lo resuelve el idioma activo.
+const toastKey = ref('')
+const toast = computed(() => toastKey.value ? t.value.toast[toastKey.value] : '')
 let toastTimer = null
-function flash (msg) {
-  toast.value = msg
+function flash (key) {
+  toastKey.value = key
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => (toast.value = ''), 3000)
+  toastTimer = setTimeout(() => (toastKey.value = ''), 3000)
 }
 
 const radiusLabel = computed(() =>
@@ -62,7 +79,7 @@ const radiusLabel = computed(() =>
 const myPinLeft = computed(() => {
   if (!myPin.value) return ''
   const ms = myPin.value.expiresAt - now.value
-  if (ms <= 0) return 'expirado'
+  if (ms <= 0) return t.value.myPin.expired
   const h = Math.floor(ms / 3600000)
   const m = Math.floor((ms % 3600000) / 60000)
   return h > 0 ? `${h} h ${m} min` : `${m} min`
@@ -82,7 +99,7 @@ onMounted(async () => {
     identityInst.value = await initIdentity()
     ready.value = true
   } catch (e) {
-    idError.value = 'No se pudo abrir el vault de identidad (id.dotrino.com).'
+    idErrorKey.value = 'identity'
     console.warn(e)
   }
   // Reputación para el modal de perfil del topbar (sin ella, el botón solo abre
@@ -101,9 +118,9 @@ onUnmounted(() => {
 })
 
 function startLocate () {
-  if (!('geolocation' in navigator)) { geoError.value = 'Tu navegador no tiene geolocalización.'; return }
+  if (!('geolocation' in navigator)) { geoErrorKey.value = 'noGeo'; return }
   locating.value = true
-  geoError.value = ''
+  geoErrorKey.value = ''
   navigator.geolocation.getCurrentPosition(onPos, onGeoErr, { enableHighAccuracy: true, timeout: 12000 })
   watchId = navigator.geolocation.watchPosition(onPos, onGeoErr, { enableHighAccuracy: true, maximumAge: 10000 })
 }
@@ -116,16 +133,14 @@ function onPos (p) {
 }
 function onGeoErr (e) {
   locating.value = false
-  geoError.value = e.code === 1
-    ? 'Permiso de ubicación denegado. Habilitalo para ver anuncios cerca.'
-    : 'No se pudo obtener tu ubicación.'
+  geoErrorKey.value = e.code === 1 ? 'geoDenied' : 'geoFail'
 }
 
 // ---- consultar ----
 async function refresh () {
   if (!pos.value || !ready.value) return
   loading.value = true
-  netError.value = ''
+  netErrorKey.value = ''
   try {
     const q = { lat: pos.value.lat, lng: pos.value.lng, radiusMeters: radiusMeters.value, limit: 100 }
     if (filter.value !== 'todos') q.filter = { kind: filter.value }
@@ -138,7 +153,7 @@ async function refresh () {
       .sort((a, b) => a.distanceMeters - b.distanceMeters)
     await nextTick(); drawRadar()
   } catch (e) {
-    netError.value = 'No se pudieron cargar los anuncios.'
+    netErrorKey.value = 'loadPins'
     console.warn(e)
   } finally {
     loading.value = false
@@ -151,8 +166,8 @@ watch(searchTags, () => { clearTimeout(tagDebounce); tagDebounce = setTimeout(()
 
 // ---- publicar ----
 async function doPublish () {
-  if (!form.title.trim()) { flash('Ponele un título al anuncio.'); return }
-  if (!pos.value) { flash('Necesito tu ubicación para publicar.'); return }
+  if (!form.title.trim()) { flash('needTitle'); return }
+  if (!pos.value) { flash('needLocation'); return }
   publishing.value = true
   try {
     const payload = { kind: form.kind, title: form.title.trim().slice(0, 80) }
@@ -163,10 +178,10 @@ async function doPublish () {
     myPin.value = { payload, expiresAt: res.expiresAt }
     showPublish.value = false
     form.title = ''; form.price = ''; form.tags = ''
-    flash('Anuncio publicado.')
+    flash('published')
     refresh()
   } catch (e) {
-    flash('No se pudo publicar.')
+    flash('publishFail')
     console.warn(e)
   } finally {
     publishing.value = false
@@ -176,9 +191,9 @@ async function removeMine () {
   try {
     await getGeo().removePin()
     myPin.value = null
-    flash('Anuncio retirado.')
+    flash('removed')
     refresh()
-  } catch (e) { flash('No se pudo retirar.'); console.warn(e) }
+  } catch (e) { flash('removeFail'); console.warn(e) }
 }
 
 // ---- contactar (handoff por el proxy) + perfil/reputación ----
@@ -186,7 +201,8 @@ async function removeMine () {
 // compartida <dotrino-profile> dentro del modal de contacto.
 function openContact (pin) {
   contactTarget.value = pin
-  contactText.value = `Hola, me interesa tu anuncio "${pin.payload?.title || ''}".`
+  // Borrador en el idioma activo; a partir de aquí es texto del usuario y no se retraduce.
+  contactText.value = t.value.contact.draft(pin.payload?.title || '')
 }
 
 // Provider del perfil: cablea identidad + registro de reputación del ecosistema.
@@ -203,7 +219,7 @@ function bindProfile (el) {
   if (!el) return
   ensureProfileProvider().then((p) => { if (p) el.provider = p })
 }
-function onProfileRate () { flash('Calificación publicada. Gracias.') }
+function onProfileRate () { flash('rated') }
 const profileTheme = {
   '--ccp-bg': 'var(--panel)',
   '--ccp-bg-2': 'var(--panel2)',
@@ -244,10 +260,10 @@ async function sendContact () {
       title: contactTarget.value.payload?.title || '',
       text: contactText.value.trim().slice(0, 280)
     })
-    flash('Mensaje enviado. Sigue la charla en el messenger.')
+    flash('sent')
     contactTarget.value = null
   } catch (e) {
-    flash('No se pudo contactar (proxy/identidad).')
+    flash('sendFail')
     console.warn(e)
   } finally {
     sending.value = false
@@ -300,48 +316,48 @@ window.addEventListener('resize', drawRadar)
 
 <template>
   <div class="app">
-    <!-- Barra superior estándar (§5): marca + volver + perfil + moneda de support.
-         `no-lang`: la app es solo en español (falta el i18n es/en, §9).
-         `:lang.attr`: OJO, tiene que ir como ATRIBUTO. El componente define
-         `get lang()` sin setter, así que Vue (que en un custom element prefiere la
-         propiedad cuando `'lang' in el`) no lograría escribirlo: se perdería en
-         silencio y el topbar caería a navigator.language, poniendo <html lang="en">
-         en una app que solo habla español. -->
+    <!-- Barra superior estándar (§5): marca + volver + idioma + perfil + support.
+         El toggle ES/EN del topbar es el ÚNICO selector de idioma de la app: él
+         persiste la preferencia y nos avisa por 'dotrino-lang'.
+         `:lang.attr`: OJO, tiene que ir como ATRIBUTO. Vue, en un custom element,
+         prefiere la propiedad cuando `'lang' in el` (y `lang` es nativa de
+         HTMLElement, así que siempre lo está); forzando el atributo nos aseguramos
+         de que el componente lo lea con getAttribute('lang'). -->
     <dotrino-topbar
       ref="topbarRef"
       class="topbar"
       brand="Trueque"
       icon="/icon.svg"
       brand-href="./"
-      :lang.attr="'es'"
-      no-lang
+      :lang.attr="lang"
       profile
       support-href="https://ko-fi.com/dotrino"
       support-repo="imdotrino/dotrino-trueque"
-      support-discord="https://discord.gg/D648uq7cth">
-      <dotrino-install slot="end" class="cc-install" data-testid="install-btn"></dotrino-install>
+      support-discord="https://discord.gg/D648uq7cth"
+      @dotrino-lang="onLang">
+      <dotrino-install slot="end" class="cc-install" data-testid="install-btn" :lang.attr="lang"></dotrino-install>
     </dotrino-topbar>
 
     <main class="main">
       <p v-if="idError" class="banner err">{{ idError }}</p>
       <p v-if="geoError" class="banner err">
         {{ geoError }}
-        <button class="btn small" @click="startLocate">Reintentar</button>
+        <button class="btn small" @click="startLocate">{{ t.errors.retry }}</button>
       </p>
 
       <!-- controles -->
       <div class="controls">
         <div class="chips">
-          <button class="chip" :class="{ on: filter === 'todos' }" @click="filter = 'todos'">Todos</button>
+          <button class="chip" :class="{ on: filter === 'todos' }" @click="filter = 'todos'">{{ t.filterAll }}</button>
           <button v-for="k in KINDS" :key="k.id" class="chip"
                   :class="{ on: filter === k.id }"
                   :style="filter === k.id ? { background: k.color, color: '#04140f', borderColor: 'transparent' } : {}"
-                  @click="filter = k.id">{{ k.label }}</button>
+                  @click="filter = k.id">{{ t.kinds[k.id] }}</button>
         </div>
         <input class="tagSearch" v-model="searchTags" maxlength="80"
-               placeholder="Buscar por etiqueta: bici, comida…" />
+               :placeholder="t.controls.tagSearch" />
         <div class="radius">
-          <span class="muted">Radio</span>
+          <span class="muted">{{ t.controls.radius }}</span>
           <input type="range" min="300" max="10000" step="100" v-model.number="radiusMeters" />
           <strong>{{ radiusLabel }}</strong>
         </div>
@@ -350,81 +366,82 @@ window.addEventListener('resize', drawRadar)
       <!-- radar -->
       <div class="radarWrap">
         <canvas ref="canvas" class="radar"></canvas>
-        <div v-if="locating" class="radarHint">Ubicándote…</div>
-        <div v-else-if="!pos" class="radarHint">Activa la ubicación</div>
+        <div v-if="locating" class="radarHint">{{ t.radar.locating }}</div>
+        <div v-else-if="!pos" class="radarHint">{{ t.radar.needLocation }}</div>
         <div v-else class="radarScale">{{ radiusLabel }}</div>
       </div>
 
       <!-- mi anuncio -->
       <div v-if="myPin" class="myPin">
-        <span class="badge" :style="{ background: kindOf(myPin.payload.kind).color }">{{ kindOf(myPin.payload.kind).label }}</span>
+        <span class="badge" :style="{ background: kindOf(myPin.payload.kind).color }">{{ kindLabel(myPin.payload.kind) }}</span>
         <span class="myTitle">{{ myPin.payload.title }}</span>
-        <span class="muted ttl">expira en {{ myPinLeft }}</span>
-        <button class="btn danger small" @click="removeMine">Retirar</button>
+        <span class="muted ttl">{{ t.myPin.expiresIn(myPinLeft) }}</span>
+        <button class="btn danger small" @click="removeMine">{{ t.myPin.remove }}</button>
       </div>
 
       <!-- lista -->
       <div class="listHead">
-        <h2>Cerca de ti <span class="muted" v-if="!loading">({{ pins.length }})</span></h2>
-        <button class="btn ghost small" :disabled="loading || !pos" @click="refresh">{{ loading ? '…' : 'Actualizar' }}</button>
+        <h2>{{ t.list.title }} <span class="muted" v-if="!loading">({{ pins.length }})</span></h2>
+        <button class="btn ghost small" :disabled="loading || !pos" @click="refresh">{{ loading ? '…' : t.list.refresh }}</button>
       </div>
       <p v-if="netError" class="banner err">{{ netError }}</p>
 
       <ul class="list">
         <li v-for="p in pins" :key="p.publickey" class="card">
-          <span class="badge" :style="{ background: kindOf(p.payload?.kind).color }">{{ kindOf(p.payload?.kind).label }}</span>
+          <span class="badge" :style="{ background: kindOf(p.payload?.kind).color }">{{ kindLabel(p.payload?.kind) }}</span>
           <div class="cardBody">
-            <div class="cardTitle">{{ p.payload?.title || '(sin título)' }}</div>
+            <div class="cardTitle">{{ p.payload?.title || t.list.noTitle }}</div>
             <div class="cardMeta">
               <span v-if="p.payload?.price" class="price">{{ p.payload.price }}</span>
               <span class="muted">{{ fmtDist(p.distanceMeters) }}</span>
             </div>
           </div>
-          <button class="btn primary small" @click="openContact(p)">Contactar</button>
+          <button class="btn primary small" @click="openContact(p)">{{ t.list.contact }}</button>
         </li>
         <li v-if="!pins.length && pos && !loading" class="empty">
-          No hay anuncios en {{ radiusLabel }}. Sube el radio o publica el primero.
+          {{ t.list.empty(radiusLabel) }}
         </li>
       </ul>
     </main>
 
     <!-- FAB publicar -->
-    <button class="fab" :disabled="!ready || !pos" @click="showPublish = true" title="Publicar anuncio">+</button>
+    <button class="fab" :disabled="!ready || !pos" @click="showPublish = true"
+            :title="t.publish.fab" :aria-label="t.publish.fab">+</button>
 
     <!-- modal publicar -->
     <div v-if="showPublish" class="modal" @click.self="showPublish = false">
       <div class="sheet">
-        <h3>Publicar anuncio</h3>
+        <h3>{{ t.publish.heading }}</h3>
         <div class="kindPick">
           <button v-for="k in KINDS" :key="k.id" class="chip"
                   :class="{ on: form.kind === k.id }"
                   :style="form.kind === k.id ? { background: k.color, color: '#04140f', borderColor: 'transparent' } : {}"
-                  @click="form.kind = k.id">{{ k.label }}</button>
+                  @click="form.kind = k.id">{{ t.kinds[k.id] }}</button>
         </div>
         <label class="fld">
-          <span>Título</span>
-          <input v-model="form.title" maxlength="80" placeholder="Ej: Bici rodado 26, casi nueva" />
+          <span>{{ t.publish.title }}</span>
+          <input v-model="form.title" maxlength="80" :placeholder="t.publish.titlePh" />
         </label>
         <label v-if="form.kind === 'vendo'" class="fld">
-          <span>Precio (opcional)</span>
-          <input v-model="form.price" maxlength="24" placeholder="Ej: $80 / negociable" />
+          <span>{{ t.publish.price }}</span>
+          <input v-model="form.price" maxlength="24" :placeholder="t.publish.pricePh" />
         </label>
         <label class="fld">
-          <span>Etiquetas (opcional, separadas por coma)</span>
-          <input v-model="form.tags" maxlength="120" placeholder="Ej: bici, rodado26, usado" />
+          <span>{{ t.publish.tags }}</span>
+          <input v-model="form.tags" maxlength="120" :placeholder="t.publish.tagsPh" />
         </label>
         <label class="fld">
-          <span>Vence en</span>
+          <span>{{ t.publish.expires }}</span>
           <select v-model.number="form.ttlH">
-            <option :value="1">1 hora</option>
-            <option :value="6">6 horas</option>
-            <option :value="24">24 horas (máx)</option>
+            <option :value="1">{{ t.publish.ttl1 }}</option>
+            <option :value="6">{{ t.publish.ttl6 }}</option>
+            <option :value="24">{{ t.publish.ttl24 }}</option>
           </select>
         </label>
-        <p class="muted tiny">Tu anuncio es efímero y anónimo: lleva tu identidad para que te contacten por el messenger, sin guardar tu ubicación.</p>
+        <p class="muted tiny">{{ t.publish.note }}</p>
         <div class="sheetBtns">
-          <button class="btn ghost" @click="showPublish = false">Cancelar</button>
-          <button class="btn primary" :disabled="publishing" @click="doPublish">{{ publishing ? 'Publicando…' : 'Publicar' }}</button>
+          <button class="btn ghost" @click="showPublish = false">{{ t.publish.cancel }}</button>
+          <button class="btn primary" :disabled="publishing" @click="doPublish">{{ publishing ? t.publish.submitting : t.publish.submit }}</button>
         </div>
       </div>
     </div>
@@ -432,8 +449,8 @@ window.addEventListener('resize', drawRadar)
     <!-- modal contactar -->
     <div v-if="contactTarget" class="modal" @click.self="contactTarget = null">
       <div class="sheet">
-        <h3>Contactar</h3>
-        <p class="muted small">Sobre: <strong>{{ contactTarget.payload?.title }}</strong></p>
+        <h3>{{ t.contact.heading }}</h3>
+        <p class="muted small">{{ t.contact.about }} <strong>{{ contactTarget.payload?.title }}</strong></p>
 
         <!-- Perfil + reputación del vendedor (y calificarlo) — tarjeta compartida -->
         <dotrino-profile
@@ -441,19 +458,20 @@ window.addEventListener('resize', drawRadar)
           mode="edit"
           :style="profileTheme"
           :pubkey="contactTarget.publickey"
-          name="Vendedor"
+          :name="t.contact.seller"
+          :lang.attr="lang"
           @cc-profile-rate="onProfileRate"
         ></dotrino-profile>
 
         <label class="fld">
-          <span>Mensaje</span>
+          <span>{{ t.contact.message }}</span>
           <input v-model="contactText" maxlength="280" />
         </label>
-        <p class="muted tiny">Se envía por el proxy (cae en su messenger). Sigue la charla ahí.</p>
+        <p class="muted tiny">{{ t.contact.note }}</p>
 
         <div class="sheetBtns">
-          <button class="btn ghost" @click="contactTarget = null">Cerrar</button>
-          <button class="btn primary" :disabled="sending" @click="sendContact">{{ sending ? 'Enviando…' : 'Enviar' }}</button>
+          <button class="btn ghost" @click="contactTarget = null">{{ t.contact.close }}</button>
+          <button class="btn primary" :disabled="sending" @click="sendContact">{{ sending ? t.contact.sending : t.contact.send }}</button>
         </div>
       </div>
     </div>
