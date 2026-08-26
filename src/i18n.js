@@ -94,6 +94,7 @@ export const messages = {
       rated: 'Calificación publicada. Gracias.',
       sent: 'Mensaje enviado. Sigue la conversación en Messenger.',
       sendFail: 'No pudimos enviar el mensaje. Inténtalo de nuevo.',
+      sendNoKey: 'Este anuncio es de una versión anterior y no admite mensajes en privado. Volverá a estar disponible cuando quien lo publicó lo renueve.',
     },
   },
 
@@ -175,6 +176,7 @@ export const messages = {
       rated: 'Rating published. Thank you.',
       sent: 'Message sent. Carry on the conversation in Messenger.',
       sendFail: "We couldn't send your message. Try again.",
+      sendNoKey: 'This listing is from an earlier version and cannot receive private messages. It will work again once its owner renews it.',
     },
   },
 }

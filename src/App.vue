@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, onMounted, onUnmounted, watch, watchEffect, nextTick } from 'vue'
-import { initIdentity, getMyPubkey, getIdentity } from './services/identity'
+import { initIdentity, getMyPubkey, getIdentity, getEncryptionPubkey } from './services/identity'
 import { getGeo } from './services/geo'
 import { contactSeller } from './services/proxy'
 import { getReputation } from './services/reputation'
@@ -171,6 +171,11 @@ async function doPublish () {
   publishing.value = true
   try {
     const payload = { kind: form.kind, title: form.title.trim().slice(0, 80) }
+    // Mi llave de cifrado va en el pin, que está firmado: es lo que permite que me
+    // escriban en privado sin que el proxio lea el mensaje (CONVENCIONES §4.1).
+    // Es una clave PÚBLICA; no revela nada.
+    try { payload.encPub = await getEncryptionPubkey() } catch { /* sin llave, el pin
+      sigue siendo válido: quien quiera escribir verá que no se puede sellar */ }
     if (form.kind === 'vendo' && form.price.trim()) payload.price = form.price.trim().slice(0, 24)
     const tags = form.tags.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
     const ttlMs = Number(form.ttlH) * 3600 * 1000
@@ -256,14 +261,20 @@ async function sendContact () {
   if (!contactTarget.value) return
   sending.value = true
   try {
-    await contactSeller(contactTarget.value.publickey, {
-      title: contactTarget.value.payload?.title || '',
-      text: contactText.value.trim().slice(0, 280)
-    })
+    await contactSeller(
+      contactTarget.value.publickey,
+      contactTarget.value.payload?.encPub,
+      {
+        title: contactTarget.value.payload?.title || '',
+        text: contactText.value.trim().slice(0, 280)
+      })
     flash('sent')
     contactTarget.value = null
   } catch (e) {
-    flash('sendFail')
+    // Se distingue por CÓDIGO, no por el texto: el mensaje está traducido. Un anuncio
+    // sin llave de cifrado no es un fallo de red, y decir «inténtalo de nuevo» haría
+    // que el usuario reintentara algo que no puede funcionar.
+    flash(e?.code === 'unsealed' ? 'sendNoKey' : 'sendFail')
     console.warn(e)
   } finally {
     sending.value = false

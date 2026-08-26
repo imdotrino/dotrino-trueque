@@ -1,16 +1,21 @@
 // Handoff de contacto por el proxy (transporte del ecosistema). Cuando alguien
-// quiere responder a un anuncio, le mandamos un mensaje por sendByPubkey: cae en
-// la cola offline 24h del vendedor y le aparece en su messenger (misma identidad
-// del vault). El índice geo es sólo descubrimiento; la conversación va por acá.
+// quiere responder a un anuncio, le mandamos un mensaje SELLADO: cae en la cola
+// offline 24h del vendedor y le aparece en su messenger (misma identidad del vault).
+// El índice geo es sólo descubrimiento; la conversación va por acá.
+//
+// Va sellado porque el proxio NO cifra (CONVENCIONES §4.1): sin esto, el texto que una
+// persona le escribe a otra sería legible para quien opere el proxio. La llave de
+// cifrado del vendedor viaja en su pin, firmada por él.
 
 import { getWebSocketProxyClient } from '@dotrino/proxy-client'
-import { getIdentity, getMyPubkey } from './identity'
+import { getIdentity, getMyPubkey, sealing } from './identity'
 
 let client = null
 let identified = false
 
 async function ensureConnected () {
-  if (!client) client = getWebSocketProxyClient()
+  // `requireSealed`: nada en claro, ni al enviar ni al recibir (CONVENCIONES §4.1).
+  if (!client) client = getWebSocketProxyClient({ requireSealed: true, sealing })
   if (identified) return client
   const token = await client.connect()
   const id = await getIdentity()
@@ -26,15 +31,20 @@ async function ensureConnected () {
 
 /**
  * Envía un mensaje de contacto al dueño de un anuncio.
+ *
+ * Va SELLADO: el texto es de una persona para otra y el proxio no tiene por qué
+ * verlo. La llave de cifrado del vendedor viaja en su pin, firmada por él.
+ *
  * @param {string} toPubkey  pubkey JWK string del pin
+ * @param {string} toEncPub  pública de cifrado del pin (`payload.encPub`)
  * @param {object} payload   { title, text, ... }
  */
-export async function contactSeller (toPubkey, payload) {
+export async function contactSeller (toPubkey, toEncPub, payload) {
   const c = await ensureConnected()
-  await c.sendByPubkey([toPubkey], {
+  await c.sendSealed([toPubkey], {
     type: 'trueque-contact',
     app: 'trueque',
     ...payload,
     ts: Date.now()
-  })
+  }, { peerEncPub: toEncPub })
 }

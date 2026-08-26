@@ -37,3 +37,38 @@ export async function getPublicKeyJwk () {
   if (!myPubkey) await initIdentity()
   return myPubkey
 }
+
+// --- sellado extremo a extremo (CONVENCIONES §4.1) ---------------------------
+//
+// El proxio NO cifra: lo que se manda con `sendByPubkey` lo puede leer quien lo opere.
+// El mensaje de contacto es una persona escribiéndole a otra, así que va sellado.
+//
+// La llave privada de cifrado vive en el VAULT, no aquí: la app no la toca. Se delega
+// en `identity.encrypt`/`identity.decrypt`, que es el mismo E2E que usa el messenger.
+
+/** Mi pública de cifrado. Va en el pin, firmada, para que puedan escribirme en privado. */
+export async function getEncryptionPubkey () {
+  const id = await getIdentity()
+  return id.getEncryptionPubkey()
+}
+
+export const sealing = {
+  async seal (msg, peerEncPub) {
+    if (!peerEncPub) {
+      const e = new Error('el anuncio no trae llave de cifrado')
+      e.code = 'unsealed'
+      throw e
+    }
+    const id = await getIdentity()
+    const envelope = await id.encrypt([peerEncPub], JSON.stringify(msg))
+    return { app: 'trueque', sealed: envelope, from: await getEncryptionPubkey() }
+  },
+  async open (sobre) {
+    const id = await getIdentity()
+    const texto = await id.decrypt(sobre.from, null, sobre.sealed)
+    return JSON.parse(texto)
+  },
+  isSealed (m) {
+    return !!m && m.app === 'trueque' && !!m.sealed
+  },
+}
