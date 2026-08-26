@@ -3,6 +3,12 @@
 // offline 24h del vendedor y le aparece en su messenger (misma identidad del vault).
 // El índice geo es sólo descubrimiento; la conversación va por acá.
 //
+// ⚠️ OJO: hoy este mensaje NO LO RECIBE NADIE. Se manda y cae en la cola offline, pero
+// no hay un solo receptor de `trueque-contact` en el ecosistema: el messenger espera el
+// formato `TIPO|{json}` y esto es un objeto JSON pelado, así que lo descarta sin decir
+// nada. O sea: responder a un anuncio no le llega al vendedor. Está anotado en
+// PENDIENTES.md del ecosistema; sellarlo no cambia eso ni lo empeora.
+//
 // Va sellado porque el proxio NO cifra (CONVENCIONES §4.1): sin esto, el texto que una
 // persona le escribe a otra sería legible para quien opere el proxio. La llave de
 // cifrado del vendedor viaja en su pin, firmada por él.
