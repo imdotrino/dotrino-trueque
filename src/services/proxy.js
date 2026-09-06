@@ -23,14 +23,13 @@ async function ensureConnected () {
   // `requireSealed`: nada en claro, ni al enviar ni al recibir (CONVENCIONES §4.1).
   if (!client) client = getWebSocketProxyClient({ requireSealed: true, sealing })
   if (identified) return client
-  const token = await client.connect()
+  await client.connect()
   const id = await getIdentity()
   const publickey = getMyPubkey()
   if (!publickey) throw new Error('vault sin pubkey; no se puede identificar')
   // Mismo sobre de identify que usa el messenger.
-  const data = { op: 'identify', publickey, token, ts: Date.now() }
-  const { signature } = await id.signData(data)
-  await client.identify({ data, signature })
+  // El sobre lo arma el pilar, con el destinatario dentro (antes se copiaba en cada app).
+  await client.identifyAs({ publickey, sign: (d) => id.signData(d) })
   identified = true
   return client
 }
