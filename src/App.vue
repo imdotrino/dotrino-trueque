@@ -225,23 +225,6 @@ function bindProfile (el) {
   ensureProfileProvider().then((p) => { if (p) el.provider = p })
 }
 function onProfileRate () { flash('rated') }
-const profileTheme = {
-  '--ccp-bg': 'var(--panel)',
-  '--ccp-bg-2': 'var(--panel2)',
-  '--ccp-bg-3': 'var(--panel2)',
-  '--ccp-bg-4': 'var(--line)',
-  '--ccp-border': 'var(--line)',
-  '--ccp-text': 'var(--text)',
-  '--ccp-muted': 'var(--muted)',
-  '--ccp-accent': 'var(--accent)',
-  '--ccp-accent-2': '#23b8a6',
-  '--ccp-gold': 'var(--vendo)',
-  '--ccp-derived': 'var(--vendo)',
-  '--ccp-online': 'var(--regalo)',
-  '--ccp-affinity': 'var(--accent)',
-  '--ccp-input-bg': 'var(--panel2)',
-  '--ccp-radius': '12px',
-}
 
 // "Mi perfil" (§6.1): el topbar es dueño del botón Y del modal <dotrino-profile
 // mode="self">. Solo le pasamos las instancias del vault + el tema; así la app no
@@ -254,7 +237,6 @@ watchEffect(() => {
   if (!tb) return
   tb.identity = identityInst.value ?? null
   tb.reputation = reputationInst.value ?? null
-  tb.profileTheme = profileTheme
 })
 
 async function sendContact () {
@@ -294,7 +276,10 @@ function drawRadar () {
   ctx.clearRect(0, 0, size, size)
 
   // anillos
-  ctx.strokeStyle = 'rgba(45,212,191,.18)'
+  // El color del tema (claro u oscuro) sale del CSS: la regla .radar le pone color: var(--accent).
+  const accent = getComputedStyle(cv).color
+  ctx.strokeStyle = accent
+  ctx.globalAlpha = 0.25
   ctx.lineWidth = 1
   for (const f of [0.33, 0.66, 1]) {
     ctx.beginPath(); ctx.arc(cx, cy, R * f, 0, Math.PI * 2); ctx.stroke()
@@ -304,7 +289,8 @@ function drawRadar () {
   ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R); ctx.stroke()
 
   // yo
-  ctx.fillStyle = '#2dd4bf'
+  ctx.globalAlpha = 1
+  ctx.fillStyle = accent
   ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill()
 
   if (!pos.value) return
@@ -318,7 +304,8 @@ function drawRadar () {
     const rr = (d / radiusMeters.value) * R
     const x = cx + Math.sin(ang) * rr
     const y = cy - Math.cos(ang) * rr
-    ctx.fillStyle = kindOf(p.payload?.kind).color
+    // El canvas no entiende var(--x): se lee el valor de la variable.
+    ctx.fillStyle = getComputedStyle(cv).getPropertyValue(`--${kindOf(p.payload?.kind).id}`).trim()
     ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill()
   }
 }
@@ -341,7 +328,7 @@ window.addEventListener('resize', drawRadar)
       icon="/icon.svg"
       brand-href="./"
       :lang.attr="lang"
-      profile
+      profile theme
       support-href="https://ko-fi.com/dotrino"
       support-repo="imdotrino/dotrino-trueque"
       support-discord="https://discord.gg/D648uq7cth"
@@ -467,7 +454,6 @@ window.addEventListener('resize', drawRadar)
         <dotrino-profile
           :ref="bindProfile"
           mode="edit"
-          :style="profileTheme"
           :pubkey="contactTarget.publickey"
           :name="t.contact.seller"
           :lang.attr="lang"
@@ -511,12 +497,6 @@ window.addEventListener('resize', drawRadar)
    (el .bar del componente no lo es). */
 .topbar {
   position: sticky; top: 0; z-index: 5;
-  --dotrino-topbar-bg: var(--panel);
-  --dotrino-topbar-border: var(--line);
-  --dotrino-topbar-text: var(--text);
-  --dotrino-topbar-muted: var(--muted);
-  --dotrino-topbar-accent: var(--accent);
-  --dotrino-topbar-accent-text: var(--accent-ink);
 }
 .topbar::part(brand-name) { font-weight: 800; font-size: 1.1rem; }
 /* Botón de perfil: circular ghost, como el resto de controles de la app. */
@@ -541,7 +521,7 @@ window.addEventListener('resize', drawRadar)
 .main { flex: 1; width: 100%; max-width: 680px; margin: 0 auto; padding: .8rem; }
 
 .banner { padding: .6rem .8rem; border-radius: .6rem; margin: .4rem 0; display: flex; gap: .6rem; align-items: center; }
-.banner.err { background: #2a1620; color: #ffb4b4; border: 1px solid #5a2a3a; }
+.banner.err { background: var(--dt-error-soft); color: var(--dt-error-ink); border: 1px solid var(--dt-error); }
 
 .controls { display: flex; flex-direction: column; gap: .6rem; margin: .4rem 0 .8rem; }
 .chips { display: flex; gap: .4rem; flex-wrap: wrap; }
@@ -554,7 +534,7 @@ window.addEventListener('resize', drawRadar)
 .radius input[type=range] { flex: 1; accent-color: var(--accent); }
 
 .radarWrap { position: relative; width: min(78vw, 360px); margin: .4rem auto 1rem; aspect-ratio: 1; }
-.radar { width: 100%; height: 100%; background: radial-gradient(circle at center, #0e1726, #0a0e14 70%); border-radius: 50%; border: 1px solid var(--line); }
+.radar { width: 100%; height: 100%; background: radial-gradient(circle at center, var(--dt-surface), var(--dt-surface-3) 70%); border-radius: 50%; border: 1px solid var(--line); color: var(--accent); }
 .radarHint, .radarScale { position: absolute; left: 50%; transform: translateX(-50%); color: var(--muted); font-size: .85rem; }
 .radarHint { top: 50%; transform: translate(-50%, -50%); }
 .radarScale { bottom: 6px; font-size: .75rem; }
