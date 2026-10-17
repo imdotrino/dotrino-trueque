@@ -63,7 +63,7 @@ export async function getEncryptionPubkey () {
 export const sealing = {
   async seal (msg, peerEncPub) {
     if (!peerEncPub) {
-      const e = new Error('el anuncio no trae llave de cifrado')
+      const e = new Error('the listing carries no encryption key')
       e.code = 'unsealed'
       throw e
     }
@@ -71,10 +71,10 @@ export const sealing = {
     const envelope = await id.encrypt([peerEncPub], JSON.stringify(msg))
     return { app: 'trueque', sealed: envelope, from: await getEncryptionPubkey() }
   },
-  async open (sobre) {
+  async open (envelope) {
     const id = await getIdentity()
-    const texto = await id.decrypt(sobre.from, null, sobre.sealed)
-    return JSON.parse(texto)
+    const plaintext = await id.decrypt(envelope.from, null, envelope.sealed)
+    return JSON.parse(plaintext)
   },
   isSealed (m) {
     return !!m && m.app === 'trueque' && !!m.sealed

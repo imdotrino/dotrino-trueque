@@ -26,7 +26,7 @@ async function ensureConnected () {
   await client.connect()
   const id = await getIdentity()
   const publickey = getMyPubkey()
-  if (!publickey) throw new Error('vault sin pubkey; no se puede identificar')
+  if (!publickey) throw new Error('vault has no pubkey: cannot identify')
   // Mismo sobre de identify que usa el messenger.
   // El sobre lo arma el pilar, con el destinatario dentro (antes se copiaba en cada app).
   await client.identifyAs({ publickey, sign: (d) => id.signData(d) })

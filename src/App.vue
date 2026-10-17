@@ -44,7 +44,7 @@ const netErrorKey = ref('')
 const netError = computed(() => netErrorKey.value ? t.value.errors[netErrorKey.value] : '')
 
 const radiusMeters = ref(2000)
-const filter = ref('todos')      // 'todos' | 'vendo' | 'regalo' | 'busco'
+const filter = ref('all')      // 'all' | 'vendo' | 'regalo' | 'busco'
 
 const myPin = ref(null)          // { payload, expiresAt }
 const now = ref(Date.now())
@@ -143,7 +143,7 @@ async function refresh () {
   netErrorKey.value = ''
   try {
     const q = { lat: pos.value.lat, lng: pos.value.lng, radiusMeters: radiusMeters.value, limit: 100 }
-    if (filter.value !== 'todos') q.filter = { kind: filter.value }
+    if (filter.value !== 'all') q.filter = { kind: filter.value }
     const tags = searchTags.value.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
     if (tags.length) q.tags = tags
     const { pins: got } = await getGeo().queryRadius(q)
@@ -346,7 +346,7 @@ window.addEventListener('resize', drawRadar)
       <!-- controles -->
       <div class="controls">
         <div class="chips">
-          <button class="chip" :class="{ on: filter === 'todos' }" @click="filter = 'todos'">{{ t.filterAll }}</button>
+          <button class="chip" :class="{ on: filter === 'all' }" @click="filter = 'all'">{{ t.filterAll }}</button>
           <button v-for="k in KINDS" :key="k.id" class="chip"
                   :class="{ on: filter === k.id }"
                   :style="filter === k.id ? { background: k.color, color: '#04140f', borderColor: 'transparent' } : {}"
