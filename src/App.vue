@@ -137,6 +137,9 @@ function onGeoErr (e) {
 }
 
 // ---- consultar ----
+// Etiquetas escritas a mano → lista: separadas por espacios o comas, sin vacías.
+const parseTags = (str) => str.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
+
 async function refresh () {
   if (!pos.value || !ready.value) return
   loading.value = true
@@ -144,7 +147,7 @@ async function refresh () {
   try {
     const q = { lat: pos.value.lat, lng: pos.value.lng, radiusMeters: radiusMeters.value, limit: 100 }
     if (filter.value !== 'all') q.filter = { kind: filter.value }
-    const tags = searchTags.value.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
+    const tags = parseTags(searchTags.value)
     if (tags.length) q.tags = tags
     const { pins: got } = await getGeo().queryRadius(q)
     const mine = getMyPubkey()
@@ -177,7 +180,7 @@ async function doPublish () {
     try { payload.encPub = await getEncryptionPubkey() } catch { /* sin llave, el pin
       sigue siendo válido: quien quiera escribir verá que no se puede sellar */ }
     if (form.kind === 'vendo' && form.price.trim()) payload.price = form.price.trim().slice(0, 24)
-    const tags = form.tags.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
+    const tags = parseTags(form.tags)
     const ttlMs = Number(form.ttlH) * 3600 * 1000
     const res = await getGeo().publishPin({ lat: pos.value.lat, lng: pos.value.lng, payload, tags, ttlMs })
     myPin.value = { payload, expiresAt: res.expiresAt }
