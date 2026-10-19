@@ -72,9 +72,7 @@ function flash (key) {
   toastTimer = setTimeout(() => (toastKey.value = ''), 3000)
 }
 
-const radiusLabel = computed(() =>
-  radiusMeters.value >= 1000 ? `${(radiusMeters.value / 1000).toFixed(1)} km` : `${radiusMeters.value} m`
-)
+const radiusLabel = computed(() => fmtDist(radiusMeters.value))
 
 const myPinLeft = computed(() => {
   if (!myPin.value) return ''
