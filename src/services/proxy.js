@@ -13,25 +13,29 @@
 // persona le escribe a otra sería legible para quien opere el proxio. La llave de
 // cifrado del vendedor viaja en su pin, firmada por él.
 
-import { getWebSocketProxyClient } from '@dotrino/proxy-client'
-import { getIdentity, getMyPubkey, sealing } from './identity'
+import { getWebSocketProxyClient, identitySealing } from '@dotrino/proxy-client'
+import { getIdentity, getMyPubkey } from './identity'
 
+/** @type {import('@dotrino/proxy-client').WebSocketProxyClient | null} */
 let client = null
 let identified = false
 
+/** @returns {Promise<import('@dotrino/proxy-client').WebSocketProxyClient>} */
 async function ensureConnected () {
   // `requireSealed`: nada en claro, ni al enviar ni al recibir (CONVENCIONES §4.1).
-  if (!client) client = getWebSocketProxyClient({ requireSealed: true, sealing })
-  if (identified) return client
-  await client.connect()
+  // El sellado lo hace el puente del pilar, con la bóveda (CONVENCIONES §4.1). La marca
+  // `trueque` es la misma de antes: quien recibe descarta lo que no es suyo por ahí.
   const id = await getIdentity()
+  const c = client ||= getWebSocketProxyClient({ requireSealed: true, sealing: identitySealing(id, { app: 'trueque' }) })
+  if (identified) return c
+  await c.connect()
   const publickey = getMyPubkey()
   if (!publickey) throw new Error('vault has no pubkey: cannot identify')
   // Mismo sobre de identify que usa el messenger.
   // El sobre lo arma el pilar, con el destinatario dentro (antes se copiaba en cada app).
-  await client.identifyAs({ publickey, sign: (d) => id.signData(d) })
+  await c.identifyAs({ publickey, sign: (d) => id.signData(d) })
   identified = true
-  return client
+  return c
 }
 
 /**
@@ -41,8 +45,10 @@ async function ensureConnected () {
  * verlo. La llave de cifrado del vendedor viaja en su pin, firmada por él.
  *
  * @param {string} toPubkey  pubkey JWK string del pin
- * @param {string} toEncPub  pública de cifrado del pin (`payload.encPub`)
- * @param {object} payload   { title, text, ... }
+ * @param {string|undefined} toEncPub  pública de cifrado del pin (`payload.encPub`); sin ella
+ *                           el envío falla con `code: 'unsealed'`
+ * @param {{ title: string, text: string }} payload
+ * @returns {Promise<void>}
  */
 export async function contactSeller (toPubkey, toEncPub, payload) {
   const c = await ensureConnected()

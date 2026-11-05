@@ -6,6 +6,7 @@
 // con el evento 'dotrino-lang'. La app NO tiene toggle ni clave propia; aquí
 // solo leemos el mismo criterio para el arranque.
 
+/** @returns {'es'|'en'} */
 export function detectLang () {
   try {
     const saved = localStorage.getItem('dotrino.lang')
@@ -40,7 +41,7 @@ export const messages = {
     },
 
     myPin: {
-      expiresIn: (left) => `expira en ${left}`,
+      expiresIn: (/** @type {string} */ left) => `expira en ${left}`,
       expired: 'expirado',
       remove: 'Retirar',
     },
@@ -50,7 +51,7 @@ export const messages = {
       refresh: 'Actualizar',
       noTitle: '(sin título)',
       contact: 'Contactar',
-      empty: (radius) => `No hay anuncios en ${radius}. Amplía el radio o publica el primero.`,
+      empty: (/** @type {string} */ radius) => `No hay anuncios en ${radius}. Amplía el radio o publica el primero.`,
     },
 
     publish: {
@@ -81,7 +82,7 @@ export const messages = {
       close: 'Cerrar',
       send: 'Enviar',
       sending: 'Enviando…',
-      draft: (title) => `Hola, me interesa tu anuncio "${title}".`,
+      draft: (/** @type {string} */ title) => `Hola, me interesa tu anuncio "${title}".`,
     },
 
     toast: {
@@ -122,7 +123,7 @@ export const messages = {
     },
 
     myPin: {
-      expiresIn: (left) => `expires in ${left}`,
+      expiresIn: (/** @type {string} */ left) => `expires in ${left}`,
       expired: 'expired',
       remove: 'Take down',
     },
@@ -132,7 +133,7 @@ export const messages = {
       refresh: 'Refresh',
       noTitle: '(untitled)',
       contact: 'Get in touch',
-      empty: (radius) => `Nothing within ${radius}. Widen the radius or post the first listing.`,
+      empty: (/** @type {string} */ radius) => `Nothing within ${radius}. Widen the radius or post the first listing.`,
     },
 
     publish: {
@@ -163,7 +164,7 @@ export const messages = {
       close: 'Close',
       send: 'Send',
       sending: 'Sending…',
-      draft: (title) => `Hi, I'm interested in your listing "${title}".`,
+      draft: (/** @type {string} */ title) => `Hi, I'm interested in your listing "${title}".`,
     },
 
     toast: {

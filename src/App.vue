@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted, onUnmounted, watch, watchEffect, nextTick } from 'vue'
+import { ref, shallowRef, reactive, computed, onMounted, onUnmounted, watch, watchEffect, nextTick } from 'vue'
 import { initIdentity, getMyPubkey, getIdentity, getEncryptionPubkey } from './services/identity'
 import { getGeo } from './services/geo'
 import { contactSeller } from './services/proxy'
@@ -16,36 +16,53 @@ import { detectLang, messages } from './i18n'
 // pone el <html lang> y nos avisa por 'dotrino-lang'. Aquí solo lo reflejamos.
 const lang = ref(detectLang())
 const t = computed(() => messages[lang.value])
+/** @param {CustomEvent<{ lang?: string }>} e */
 function onLang (e) { lang.value = e.detail?.lang === 'en' ? 'en' : 'es' }
 
 // Los ids son DATOS (viajan en el pin y en el filtro del índice geo): no se
 // traducen nunca. Lo único bilingüe es la etiqueta que se muestra.
+/** @typedef {'vendo'|'regalo'|'busco'} KindId */
+/**
+ * Un anuncio del índice geo, con lo que esta app pone en su `payload`.
+ *
+ * @typedef {import('@dotrino/geo').Pin & { payload: { kind?: string, title?: string, price?: string, encPub?: string } }} Listing
+ */
+/** @type {{ id: KindId, color: string }[]} */
 const KINDS = [
   { id: 'vendo', color: 'var(--vendo)' },
   { id: 'regalo', color: 'var(--regalo)' },
   { id: 'busco', color: 'var(--busco)' }
 ]
+/** @param {unknown} id */
 const kindOf = id => KINDS.find(k => k.id === id) || KINDS[0]
+/** @param {unknown} id */
 const kindLabel = id => t.value.kinds[kindOf(id).id]
 
 const ready = ref(false)
 // Los errores se guardan por CLAVE, no como texto ya traducido: así el banner
 // visible cambia de idioma al vuelo si se toca el toggle con el error en pantalla.
+/** @typedef {keyof typeof messages.es.errors} ErrorKey */
+/** @type {import('vue').Ref<'' | ErrorKey>} */
 const idErrorKey = ref('')
 const idError = computed(() => idErrorKey.value ? t.value.errors[idErrorKey.value] : '')
+/** @type {import('vue').Ref<{ lat: number, lng: number } | null>} */
 const pos = ref(null)            // { lat, lng }
 const locating = ref(false)
+/** @type {import('vue').Ref<'' | ErrorKey>} */
 const geoErrorKey = ref('')
 const geoError = computed(() => geoErrorKey.value ? t.value.errors[geoErrorKey.value] : '')
 
+/** @type {import('vue').Ref<Listing[]>} */
 const pins = ref([])
 const loading = ref(false)
+/** @type {import('vue').Ref<'' | ErrorKey>} */
 const netErrorKey = ref('')
 const netError = computed(() => netErrorKey.value ? t.value.errors[netErrorKey.value] : '')
 
 const radiusMeters = ref(2000)
 const filter = ref('all')      // 'all' | 'vendo' | 'regalo' | 'busco'
 
+/** @type {import('vue').Ref<{ payload: Listing['payload'], expiresAt: number } | null>} */
 const myPin = ref(null)          // { payload, expiresAt }
 const now = ref(Date.now())
 
@@ -53,6 +70,7 @@ const showPublish = ref(false)
 const form = reactive({ kind: 'vendo', title: '', price: '', tags: '', ttlH: 6 })
 const publishing = ref(false)
 
+/** @type {import('vue').Ref<Listing | null>} */
 const contactTarget = ref(null)
 const contactText = ref('')
 const sending = ref(false)
@@ -63,9 +81,13 @@ useBackLayer(showPublish)
 useBackLayer(contactTarget, { onClose: () => { contactTarget.value = null } })
 
 // Igual que los errores: guardamos la clave, el texto lo resuelve el idioma activo.
+/** @typedef {keyof typeof messages.es.toast} ToastKey */
+/** @type {import('vue').Ref<'' | ToastKey>} */
 const toastKey = ref('')
 const toast = computed(() => toastKey.value ? t.value.toast[toastKey.value] : '')
-let toastTimer = null
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let toastTimer
+/** @param {ToastKey} key */
 function flash (key) {
   toastKey.value = key
   clearTimeout(toastTimer)
@@ -83,13 +105,17 @@ const myPinLeft = computed(() => {
   return h > 0 ? `${h} h ${m} min` : `${m} min`
 })
 
+/** @param {number} m metros */
 function fmtDist (m) {
   return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`
 }
 
 // ---- arranque ----
-let poll = null
-let clock = null
+/** @type {ReturnType<typeof setInterval> | undefined} */
+let poll
+/** @type {ReturnType<typeof setInterval> | undefined} */
+let clock
+/** @type {number | null} */
 let watchId = null
 
 onMounted(async () => {
@@ -122,6 +148,7 @@ function startLocate () {
   navigator.geolocation.getCurrentPosition(onPos, onGeoErr, { enableHighAccuracy: true, timeout: 12000 })
   watchId = navigator.geolocation.watchPosition(onPos, onGeoErr, { enableHighAccuracy: true, maximumAge: 10000 })
 }
+/** @param {GeolocationPosition} p */
 function onPos (p) {
   locating.value = false
   const first = !pos.value
@@ -129,6 +156,7 @@ function onPos (p) {
   drawRadar()
   if (first && ready.value) refresh()
 }
+/** @param {GeolocationPositionError} e */
 function onGeoErr (e) {
   locating.value = false
   geoErrorKey.value = e.code === 1 ? 'geoDenied' : 'geoFail'
@@ -136,6 +164,7 @@ function onGeoErr (e) {
 
 // ---- consultar ----
 // Etiquetas escritas a mano → lista: separadas por espacios o comas, sin vacías.
+/** @param {string} str */
 const parseTags = (str) => str.split(/[\s,]+/).map(s => s.trim()).filter(Boolean)
 
 async function refresh () {
@@ -143,13 +172,14 @@ async function refresh () {
   loading.value = true
   netErrorKey.value = ''
   try {
+    /** @type {import('@dotrino/geo').QueryRadiusInput} */
     const q = { lat: pos.value.lat, lng: pos.value.lng, radiusMeters: radiusMeters.value, limit: 100 }
     if (filter.value !== 'all') q.filter = { kind: filter.value }
     const tags = parseTags(searchTags.value)
     if (tags.length) q.tags = tags
     const { pins: got } = await getGeo().queryRadius(q)
     const mine = getMyPubkey()
-    pins.value = got
+    pins.value = /** @type {Listing[]} */ (got)
       .filter(p => p.publickey !== mine)
       .sort((a, b) => a.distanceMeters - b.distanceMeters)
     await nextTick(); drawRadar()
@@ -161,7 +191,8 @@ async function refresh () {
   }
 }
 const searchTags = ref('')   // búsqueda por etiquetas (overlap)
-let tagDebounce = null
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let tagDebounce
 watch([radiusMeters, filter], () => { if (pos.value && ready.value) refresh() })
 watch(searchTags, () => { clearTimeout(tagDebounce); tagDebounce = setTimeout(() => { if (pos.value && ready.value) refresh() }, 400) })
 
@@ -171,6 +202,7 @@ async function doPublish () {
   if (!pos.value) { flash('needLocation'); return }
   publishing.value = true
   try {
+    /** @type {Listing['payload']} */
     const payload = { kind: form.kind, title: form.title.trim().slice(0, 80) }
     // Mi llave de cifrado va en el pin, que está firmado: es lo que permite que me
     // escriban en privado sin que el proxio lea el mensaje (CONVENCIONES §4.1).
@@ -205,6 +237,7 @@ async function removeMine () {
 // ---- contactar (handoff por el proxy) + perfil/reputación ----
 // El perfil + reputación del vendedor (y el calificarlo) lo maneja la tarjeta
 // compartida <dotrino-profile> dentro del modal de contacto.
+/** @param {Listing} pin */
 function openContact (pin) {
   contactTarget.value = pin
   // Borrador en el idioma activo; a partir de aquí es texto del usuario y no se retraduce.
@@ -212,6 +245,7 @@ function openContact (pin) {
 }
 
 // Provider del perfil: cablea identidad + registro de reputación del ecosistema.
+/** @type {ReturnType<typeof createVaultProfileProvider> | null} */
 let _profileProvider = null
 async function ensureProfileProvider () {
   if (_profileProvider) return _profileProvider
@@ -221,17 +255,24 @@ async function ensureProfileProvider () {
   } catch (_) { /* sin provider el componente muestra "registro no disponible" */ }
   return _profileProvider
 }
+/** @param {unknown} el  el <dotrino-profile> montado (o null al desmontar) */
 function bindProfile (el) {
   if (!el) return
-  ensureProfileProvider().then((p) => { if (p) el.provider = p })
+  const card = /** @type {{ provider?: unknown }} */ (el)
+  ensureProfileProvider().then((p) => { if (p) card.provider = p })
 }
 function onProfileRate () { flash('rated') }
 
 // "Mi perfil" (§6.1): el topbar es dueño del botón Y del modal <dotrino-profile
 // mode="self">. Solo le pasamos las instancias del vault + el tema; así la app no
 // fija la versión de @dotrino/profile (viaja dentro de @dotrino/topbar).
-const identityInst = ref(null)
-const reputationInst = ref(null)
+// shallowRef y no ref: un ref envuelve la instancia en un Proxy reactivo, y el puente
+// con el iframe de la bóveda no sabe clonar un Proxy por postMessage.
+/** @type {import('vue').ShallowRef<import('@dotrino/identity').Identity | null>} */
+const identityInst = shallowRef(null)
+/** @type {import('vue').ShallowRef<import('@dotrino/reputation').VaultReputation | null>} */
+const reputationInst = shallowRef(null)
+/** @type {import('vue').Ref<import('@dotrino/topbar').DotrinoTopbar | null>} */
 const topbarRef = ref(null)
 watchEffect(() => {
   const tb = topbarRef.value
@@ -257,13 +298,14 @@ async function sendContact () {
     // Se distingue por CÓDIGO, no por el texto: el mensaje está traducido. Un anuncio
     // sin llave de cifrado no es un fallo de red, y decir «inténtalo de nuevo» haría
     // que el usuario reintentara algo que no puede funcionar.
-    flash(e?.code === 'unsealed' ? 'sendNoKey' : 'sendFail')
+    flash(/** @type {{ code?: string } | null | undefined} */ (e)?.code === 'unsealed' ? 'sendNoKey' : 'sendFail')
     console.warn(e)
   } finally {
     sending.value = false
   }
 }
 // ---- radar (proximidad, sin tiles de terceros) ----
+/** @type {import('vue').Ref<HTMLCanvasElement | null>} */
 const canvas = ref(null)
 function drawRadar () {
   const cv = canvas.value
@@ -272,6 +314,7 @@ function drawRadar () {
   const size = cv.clientWidth
   cv.width = size * dpr; cv.height = size * dpr
   const ctx = cv.getContext('2d')
+  if (!ctx) throw new Error('could not get a 2d canvas context')
   ctx.scale(dpr, dpr)
   const cx = size / 2, cy = size / 2, R = size / 2 - 6
   ctx.clearRect(0, 0, size, size)

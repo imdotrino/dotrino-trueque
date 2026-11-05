@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit"
+    "type-check": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@dotrino/geo": "0.9.0",
@@ -29,6 +29,7 @@
     "@dotrino/prerender": "0.1.0",
     "@vitejs/plugin-vue": "^5.1.0",
     "typescript": "5.9.3",
-    "vite": "^5.4.0"
+    "vite": "^5.4.0",
+    "vue-tsc": "3.3.13"
   }
 }
